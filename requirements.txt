@@ -2,5 +2,4 @@ python-telegram-bot==20.7
 cohere
 python-dotenv
 opencv-python-headless
-torch==2.1.0
 easyocr==1.7.1
