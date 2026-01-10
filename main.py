@@ -39,9 +39,17 @@ if not TELEGRAM_BOT_TOKEN or not COHERE_API_KEY:
 # ============================================================
 # 2. AI + OCR SETUP
 # ============================================================
+import easyocr
 
-# EasyOCR (pure Python, works on Render)
-reader = easyocr.Reader(["en"], gpu=False)
+_easyocr_reader = None
+
+def get_ocr_reader():
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        print("🔄 Initializing EasyOCR (first run only)...")
+        _easyocr_reader = easyocr.Reader(["en"], gpu=False)
+    return _easyocr_reader
+
 
 # Cohere client
 co = cohere.Client(COHERE_API_KEY)
