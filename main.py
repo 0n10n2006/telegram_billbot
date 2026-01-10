@@ -1,14 +1,12 @@
 # ============================================================
 # ELECTRICITY BILL ANALYZER – TELEGRAM BOT
-# OCR + COHERE AI + PAYMENT LINKS + SOLAR ROI
-# CLEAN • STABLE • BEGINNER FRIENDLY
+# Render-ready | EasyOCR | Cohere AI | Solar ROI
 # ============================================================
 
 import os
 import re
-import cv2
 import asyncio
-import pytesseract
+import easyocr
 import cohere
 from dotenv import load_dotenv
 
@@ -27,7 +25,7 @@ from telegram.ext import (
 )
 
 # ============================================================
-# 1. ENVIRONMENT SETUP
+# 1. LOAD ENVIRONMENT VARIABLES
 # ============================================================
 
 load_dotenv()
@@ -35,17 +33,22 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
-# Tesseract OCR path (Windows)
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+if not TELEGRAM_BOT_TOKEN or not COHERE_API_KEY:
+    raise RuntimeError("Missing environment variables")
 
-# Cohere client (stable model)
+# ============================================================
+# 2. AI + OCR SETUP
+# ============================================================
+
+# EasyOCR (pure Python, works on Render)
+reader = easyocr.Reader(["en"], gpu=False)
+
+# Cohere client
 co = cohere.Client(COHERE_API_KEY)
 COHERE_MODEL = "command-r-08-2024"
 
 # ============================================================
-# 2. OFFICIAL DISCOM PAYMENT LINKS
+# 3. OFFICIAL ELECTRICITY PAYMENT PORTALS
 # ============================================================
 
 DISCOM_PAYMENT_URLS = {
@@ -61,46 +64,44 @@ DISCOM_PAYMENT_URLS = {
 }
 
 # ============================================================
-# 3. MULTI-LANGUAGE TEXT (SIMPLE)
+# 4. USER TEXT (SIMPLE & CLEAN)
 # ============================================================
 
 TEXT = {
-    "en": {
-        "welcome": (
-            "👋 *Electricity Bill Analyzer*\n\n"
-            "📸 Send a clear photo of your electricity bill.\n\n"
-            "I will:\n"
-            "• Explain charges\n"
-            "• Detect usage issues ⚠️\n"
-            "• Estimate solar ROI ☀️\n"
-            "• Give official payment link 💳"
-        ),
-        "analyzing": "📄 Bill received. Analyzing… ⏳",
-        "ocr_fail": (
-            "❌ *Could not read the bill clearly*\n\n"
-            "Tips:\n"
-            "• Use good lighting\n"
-            "• Capture full bill\n"
-            "• Avoid blur"
-        ),
-        "copy_btn": "📋 Copy Consumer Number",
-        "pay_btn": "💳 Pay on Official Website",
-        "copied": (
-            "✅ *Consumer Number*\n\n"
-            "`{}`\n\n"
-            "_Long-press to copy_"
-        ),
-    },
+    "welcome": (
+        "👋 *Electricity Bill Analyzer*\n\n"
+        "📸 Send a clear photo of your electricity bill.\n\n"
+        "I will:\n"
+        "• Explain charges\n"
+        "• Detect high usage ⚠️\n"
+        "• Estimate solar ROI ☀️\n"
+        "• Give official payment link 💳"
+    ),
+    "analyzing": "📄 Bill received. Analyzing… ⏳",
+    "ocr_fail": (
+        "❌ *Could not read the bill clearly*\n\n"
+        "Tips:\n"
+        "• Use good lighting\n"
+        "• Capture full bill\n"
+        "• Avoid blur"
+    ),
+    "copy_btn": "📋 Copy Consumer Number",
+    "pay_btn": "💳 Pay on Official Website",
+    "copied": (
+        "✅ *Consumer Number*\n\n"
+        "`{}`\n\n"
+        "_Long-press to copy_"
+    ),
 }
 
-USER_LANG = {}
-
-def t(user_id: int, key: str) -> str:
-    return TEXT["en"].get(key, "")
-
 # ============================================================
-# 4. HELPER FUNCTIONS
+# 5. HELPER FUNCTIONS
 # ============================================================
+
+def escape_md(text: str) -> str:
+    for c in "_*[]()~`>#+-=|{}.!":
+        text = text.replace(c, "\\" + c)
+    return text
 
 def detect_discom(text: str):
     text = text.upper()
@@ -122,70 +123,58 @@ def extract_consumer_number(text: str):
             return m.group(1)
     return None
 
-def enhance_ocr(image_path: str) -> str:
-    img = cv2.imread(image_path)
-    if img is None:
-        return ""
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    return pytesseract.image_to_string(gray)
-
-def escape_md(text: str) -> str:
-    for c in "_*[]()~`>#+-=|{}.!":
-        text = text.replace(c, "\\" + c)
-    return text
+def perform_ocr(image_path: str) -> str:
+    results = reader.readtext(image_path)
+    return " ".join([r[1] for r in results])
 
 # ============================================================
-# 5. CLEAN SECTION-BASED FORMATTER (SOLAR SAFE)
+# 6. FORMAT OUTPUT (SOLAR SAFE)
 # ============================================================
 
-def format_analysis(raw_text: str) -> str:
-    sections = {
+def format_analysis(raw: str) -> str:
+    titles = {
         "BILL_SUMMARY": "📄 ELECTRICITY BILL SUMMARY",
         "USAGE_ANALYSIS": "📊 USAGE ANALYSIS",
         "SOLAR_SAVINGS": "☀️ SOLAR SAVINGS ESTIMATE",
         "SAVING_TIPS": "💡 SMART SAVING TIPS",
     }
 
-    output = []
-    for line in raw_text.splitlines():
+    out = []
+    for line in raw.splitlines():
         line = line.strip()
         if not line:
             continue
 
         if line.startswith("SECTION:"):
             key = line.replace("SECTION:", "").strip()
-            title = sections.get(key, key)
-            output.append(f"\n{title}")
-            output.append("━━━━━━━━━━━━━━━━━━━━━━")
+            out.append(f"\n{titles.get(key, key)}")
+            out.append("━━━━━━━━━━━━━━━━━━━━━━")
         else:
-            output.append(f"• {line}")
+            out.append(f"• {line}")
 
-    return "\n".join(output)
+    return "\n".join(out)
 
 # ============================================================
-# 6. TELEGRAM HANDLERS
+# 7. TELEGRAM HANDLERS
 # ============================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    USER_LANG[update.effective_user.id] = "en"
     await update.message.reply_text(
-        t(update.effective_user.id, "welcome"),
+        TEXT["welcome"],
         parse_mode="Markdown",
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    await update.message.reply_text(t(user_id, "analyzing"))
+    await update.message.reply_text(TEXT["analyzing"])
 
     photo = update.message.photo[-1]
     file = await photo.get_file()
-
-    image_path = f"bill_{user_id}.jpg"
+    image_path = f"bill_{update.effective_user.id}.jpg"
     await file.download_to_drive(image_path)
 
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        None, analyze_bill, image_path, user_id
+        None, analyze_bill, image_path
     )
 
     await update.message.reply_text(
@@ -196,16 +185,15 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     os.remove(image_path)
 
-def analyze_bill(image_path: str, user_id: int):
-    ocr_text = enhance_ocr(image_path)
+def analyze_bill(image_path: str):
+    ocr_text = perform_ocr(image_path)
 
     if len(ocr_text.strip()) < 40:
-        return {"text": t(user_id, "ocr_fail"), "buttons": None}
+        return {"text": TEXT["ocr_fail"], "buttons": None}
 
     discom = detect_discom(ocr_text)
     consumer = extract_consumer_number(ocr_text)
 
-    # 🔒 SOLAR IS FORCED — NEVER SKIPPED
     prompt = f"""
 You are an Indian electricity bill expert.
 
@@ -246,16 +234,14 @@ Give 5 practical tips.
         temperature=0.3,
     )
 
-    analysis = escape_md(
-        format_analysis(response.text.strip())
-    )
+    analysis = escape_md(format_analysis(response.text.strip()))
 
     buttons = []
 
     if consumer:
         buttons.append([
             InlineKeyboardButton(
-                t(user_id, "copy_btn"),
+                TEXT["copy_btn"],
                 callback_data=f"copy_{consumer}",
             )
         ])
@@ -263,7 +249,7 @@ Give 5 practical tips.
     if discom:
         buttons.append([
             InlineKeyboardButton(
-                t(user_id, "pay_btn"),
+                TEXT["pay_btn"],
                 url=DISCOM_PAYMENT_URLS[discom],
             )
         ])
@@ -280,12 +266,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("copy_"):
         consumer = query.data.split("_", 1)[1]
         await query.message.reply_text(
-            t(update.effective_user.id, "copied").format(consumer),
+            TEXT["copied"].format(consumer),
             parse_mode="Markdown",
         )
 
 # ============================================================
-# 7. MAIN
+# 8. MAIN ENTRY POINT
 # ============================================================
 
 def main():
@@ -295,7 +281,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app.add_handler(CallbackQueryHandler(button_callback))
 
-    print("🤖 Electricity Bill Analyzer Bot running (SOLAR GUARANTEED)")
+    print("🤖 Electricity Bill Analyzer Bot running on Render")
     app.run_polling()
 
 if __name__ == "__main__":
