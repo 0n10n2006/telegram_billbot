@@ -1,5 +1,10 @@
-python-telegram-bot==20.7
-cohere
-python-dotenv
-opencv-python-headless
-pytesseract
+services:
+  - type: web
+    name: telegram-billbot
+    env: python
+    runtime: python-3.11
+    buildCommand: |
+      apt-get update
+      apt-get install -y tesseract-ocr
+      pip install -r requirements.txt
+    startCommand: python main.py
