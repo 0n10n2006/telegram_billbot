@@ -3,3 +3,4 @@ cohere
 pytesseract
 opencv-python
 python-dotenv
+easyocr
