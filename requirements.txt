@@ -1,6 +1,6 @@
 python-telegram-bot==20.7
 cohere
-pytesseract
-opencv-python
 python-dotenv
-easyocr
+opencv-python-headless
+torch==2.1.0
+easyocr==1.7.1
