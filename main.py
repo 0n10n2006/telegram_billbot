@@ -140,3 +140,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+from flask import Flask
+import threading
+import os
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "🤖 Telegram bot is alive!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+# Run Flask in background
+threading.Thread(target=run_web).start()
